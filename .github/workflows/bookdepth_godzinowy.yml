@@ -1,0 +1,69 @@
+# Przeliczenie bookDepth na srednie godzinowe, 2023-01-01 -> dzis.
+# Robimy to na GitHubie, bo to 135 tys. plikow i 54 GB ruchu — runner i tak je
+# wyrzuca, a do nas wraca tylko wynik (~0,5 GB w 20 paczkach).
+name: bookDepth -> srednie godzinowe
+
+on:
+  workflow_dispatch:
+    inputs:
+      od:
+        description: "data od (archiwum zaczyna sie 2023-01-01)"
+        default: "2023-01-01"
+      do:
+        description: "data do (puste = 3 dni temu, bo archiwum ma opoznienie)"
+        default: ""
+      czesci:
+        description: "na ile rownoleglych zadan podzielic monety"
+        default: "20"
+
+jobs:
+  przygotuj:
+    runs-on: ubuntu-latest
+    outputs:
+      paczki: ${{ steps.podziel.outputs.paczki }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: podziel
+        # Liste monet bierzemy z Binance, nie z naszego repo — inaczej trzeba by
+        # tu wrzucac magazyn. Zostawiamy wieczyste pary USDT.
+        run: |
+          python - <<'PY' > monety.json
+          import json, urllib.request
+          d = json.load(urllib.request.urlopen("https://fapi.binance.com/fapi/v1/exchangeInfo"))
+          s = sorted(x["symbol"] for x in d["symbols"]
+                     if x["contractType"] == "PERPETUAL" and x["quoteAsset"] == "USDT"
+                     and x["status"] == "TRADING")
+          n = ${{ inputs.czesci }}
+          paczki = [",".join(s[i::n]) for i in range(n)]
+          print(json.dumps([{"nr": i, "monety": p} for i, p in enumerate(paczki) if p]))
+          PY
+          echo "paczki=$(cat monety.json)" >> $GITHUB_OUTPUT
+          python -c "import json;d=json.load(open('monety.json'));print(f'paczek: {len(d)}, monet: {sum(len(x[\"monety\"].split(\",\")) for x in d)}')"
+
+  licz:
+    needs: przygotuj
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        paczka: ${{ fromJson(needs.przygotuj.outputs.paczki) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet pandas pyarrow requests
+      - run: |
+          python tools/bookdepth_do_godzin.py \
+            --monety "${{ matrix.paczka.monety }}" \
+            --od "${{ inputs.od }}" \
+            ${{ inputs.do != '' && format('--do {0}', inputs.do) || '' }} \
+            --watki 12 --wyjscie wynik
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bookdepth-godzinowy-${{ matrix.paczka.nr }}
+          path: wynik/
+          retention-days: 7
+          compression-level: 0
