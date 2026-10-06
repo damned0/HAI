@@ -24,15 +24,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: podziel
-        # Liste monet bierzemy z Binance, nie z naszego repo — inaczej trzeba by
-        # tu wrzucac magazyn. Zostawiamy wieczyste pary USDT.
+        # Lista monet LEZY W REPO (monety.txt), nie bierzemy jej z fapi.binance.com:
+        # runnery GitHuba maja adresy w USA, a Binance odpowiada im HTTP 451
+        # (zablokowane z powodow prawnych). Archiwum data.binance.vision to CDN
+        # i jego to nie dotyczy.
         run: |
           python - <<'PY' > monety.json
-          import json, urllib.request
-          d = json.load(urllib.request.urlopen("https://fapi.binance.com/fapi/v1/exchangeInfo"))
-          s = sorted(x["symbol"] for x in d["symbols"]
-                     if x["contractType"] == "PERPETUAL" and x["quoteAsset"] == "USDT"
-                     and x["status"] == "TRADING")
+          import json
+          s = [x for x in open("monety.txt").read().strip().split(",") if x]
           n = ${{ inputs.czesci }}
           paczki = [",".join(s[i::n]) for i in range(n)]
           print(json.dumps([{"nr": i, "monety": p} for i, p in enumerate(paczki) if p]))
