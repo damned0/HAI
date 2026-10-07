@@ -1,0 +1,52 @@
+name: ksztalt oi_z (F+S)
+
+on:
+  workflow_dispatch:
+    inputs:
+      od: {description: "data od", default: "2023-01-01"}
+      czesci: {description: "ile rownoleglych paczek", default: "20"}
+
+jobs:
+  przygotuj:
+    runs-on: ubuntu-latest
+    outputs: {paczki: "${{ steps.p.outputs.paczki }}"}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        run: |
+          python - <<'PY' > m.json
+          import json
+          s=[x for x in open("monety.txt").read().strip().split(",") if x]
+          n=${{ inputs.czesci }}
+          print(json.dumps([{"nr":i,"monety":",".join(s[i::n])} for i in range(n) if s[i::n]]))
+          PY
+          echo "paczki=$(cat m.json)" >> $GITHUB_OUTPUT
+
+  licz:
+    needs: przygotuj
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy: {fail-fast: false, max-parallel: 20, matrix: {paczka: "${{ fromJson(needs.przygotuj.outputs.paczki) }}"}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install --quiet pandas pyarrow requests
+      - run: python tools/oi_shard.py --monety "${{ matrix.paczka.monety }}" --od "${{ inputs.od }}" --wyjscie wynik
+      - uses: actions/upload-artifact@v4
+        with: {name: "paczka-${{ matrix.paczka.nr }}", path: wynik/, retention-days: 7}
+
+  zbierz:
+    needs: licz
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install --quiet pandas pyarrow
+      - uses: actions/download-artifact@v4
+        with: {path: paczki, pattern: "paczka-*"}
+      - run: python tools/oi_agg.py | tee wynik.txt
+      - uses: actions/upload-artifact@v4
+        with: {name: WYNIK, path: "wynik*.{txt,parquet}", retention-days: 30}
