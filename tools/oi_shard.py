@@ -120,6 +120,12 @@ def main():
     ap.add_argument("--monety", required=True)
     ap.add_argument("--od", default="2023-01-01")
     ap.add_argument("--do", default=(pd.Timestamp.utcnow().tz_localize(None) - pd.Timedelta(days=3)).strftime("%Y-%m-%d"))
+    ap.add_argument("--bramka", default="FS", choices=["FS", "F", "BAZA"],
+                    help="FS = wstegi + >=2 z 4 + zmiecenie (DEV dzis). "
+                         "F = bez zmiecenia (EPV dzis). "
+                         "BAZA = same wstegi + >=2 z 4, bez progu ATR. "
+                         "Pytanie etapu 6: czy przy dobrym rankingu luzniejsza bramka "
+                         "daje WIECEJ pieniedzy, bo nie wyrzuca transakcji.")
     ap.add_argument("--jedno-zlecenie", default="1",
                     help="1 = jedno zlecenie na monete naraz (jak silnik), 0 = jak oryginalny "
                          "pomiar glebokosc_lacznie.py. Bez tej reguly jest 6x wiecej transakcji: "
@@ -131,7 +137,8 @@ def main():
     os.makedirs(a.wyjscie, exist_ok=True)
     GLEB = a.glebokosc
     JEDNO = a.jedno_zlecenie == "1"
-    print(f"glebokosc limitu: {GLEB} x rozstep 14 h | jedno zlecenie na monete: {JEDNO}", flush=True)
+    BRAMKA = a.bramka
+    print(f"glebokosc {GLEB} | jedno zlecenie {JEDNO} | bramka {BRAMKA}", flush=True)
     s = requests.Session(); s.headers["User-Agent"] = "HAI/1.0"
     tx, zam, oig = [], {}, {}
     for sym in [x.strip().upper() for x in a.monety.split(",") if x.strip()]:
@@ -149,7 +156,8 @@ def main():
         z = ((oih - oih.rolling(BAZA_H, min_periods=BAZA_H // 3).mean())
              / oih.rolling(BAZA_H, min_periods=BAZA_H // 3).std()).to_numpy(float)
         F, zm, nwar = warunki(c, h, l, v)
-        S = F & zm
+        # F juz zawiera wstegi + >=2 z 4. Zmiecenie to OSOBNA bramka.
+        S = (F & zm) if BRAMKA == "FS" else F
         zam[sym] = o.close
         oig[sym] = oih          # godzinowe OI — do testu sekwencji; 1,5 GB piecio-
                                  # minutowych schodzi do kilkunastu MB godzinowych
@@ -190,7 +198,8 @@ def main():
                     continue
                 if war == "A":
                     wolne = k + TRZYM_H
-                tx.append({"coin": sym, "wariant": war, "t_syg": o.index[i],
+                tx.append({"coin": sym, "wariant": war, "bramka": BRAMKA,
+                       "zmiecenie": bool(zm[i]), "t_syg": o.index[i],
                            "t_we": o.index[k], "t_wy": o.index[k + TRZYM_H],
                            "wejscie": lim, "wyjscie": c[k + TRZYM_H], "oiz": z[i],
                            "atr_pct": atr[i] / c[i] * 100, "n_war": int(nwar[i]),
