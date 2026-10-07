@@ -48,9 +48,18 @@ def main():
     dni = (T.t_syg.max() - T.t_syg.min()).days or 1
     sr = T.zysk.mean()
     print(f"\n  po progu ATR: {len(T):,} transakcji, TxPD {len(T)/dni:.2f}")
-    print(f"  baza: {sr:+.4f} na transakcje (oczekiwane +2,3..+2,7)")
-    if not (1.0 < sr < 4.5):
-        print("\n  STOP: baza nie odtwarza F+S. Nie podaje wnioskow z zepsutego pomiaru.")
+    g = float(sys.argv[1]) if len(sys.argv) > 1 else 2.0
+    ocz = ODNIESIENIE.get(g)
+    print(f"  baza: {sr:+.4f} na transakcje" + (f"  |  odniesienie dla glebokosci {g}: {ocz:+.4f}" if ocz else ""))
+    if ocz:
+        print(f"  stosunek do odniesienia: {sr/ocz*100:.0f}%")
+        # Szeroki przedzial, bo liczymy 2023+ i 94 monety, a odniesienie to
+        # 2021-08+ i 134 monety — rok 2021 i krach 2022 sprzyjaly kupowaniu dolkow.
+        if not (0.30 * ocz < sr < 2.5 * ocz):
+            print("\n  STOP: baza odstaje bardziej, niz tlumaczy roznica okresu.")
+            sys.exit(0)
+    elif not (0.2 < sr < 8.0):
+        print("\n  STOP: baza poza sensownym zakresem.")
         sys.exit(0)
 
     print("\n" + "=" * 76)
