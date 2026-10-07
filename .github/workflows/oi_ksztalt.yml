@@ -49,4 +49,9 @@ jobs:
         with: {path: paczki, pattern: "paczka-*"}
       - run: python tools/oi_agg.py | tee wynik.txt
       - uses: actions/upload-artifact@v4
-        with: {name: WYNIK, path: "wynik*.{txt,parquet}", retention-days: 30}
+        with:
+          name: WYNIK
+          path: |
+            wynik.txt
+            wynik_tx.parquet
+          retention-days: 30

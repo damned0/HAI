@@ -28,9 +28,10 @@ def main():
     rm = (mi.reindex(T.t_wy).to_numpy() / mi.reindex(T.t_we).to_numpy() - 1) * 100
     T["zysk"] = (T.wyjscie / T.wejscie - 1) * 100 - np.nan_to_num(rm) - KOSZT
 
-    # prog ATR PRZEKROJOWY — ranga monety wsrod wszystkich w tej samej godzinie
-    A = Z.notna().stack().reset_index()[["level_0", "level_1"]]
-    A.columns = ["t", "coin"]
+    # prog ATR PRZEKROJOWY — ranga monety wsrod wszystkich w tej samej godzinie.
+    # BYLO TU wyliczenie `A` ze stosu Z, ktorego nigdy nie uzywalem, a ktore
+    # wywalalo caly krok (w nowszej pandzie `stack().reset_index()` nie daje
+    # kolumn level_0/level_1). Martwy kod zabil zywy wynik.
     atr = T[["t_syg", "coin", "atr_pct"]].rename(columns={"t_syg": "t"})
     atr["rank"] = atr.groupby("t").atr_pct.rank(pct=True)
     T = T.merge(atr[["t", "coin", "rank"]], left_on=["t_syg", "coin"],
