@@ -13,6 +13,13 @@ import numpy as np, pandas as pd
 
 KOSZT, PROG_ATR = 0.0885, 0.40
 
+# Oczekiwana baza F+S ZALEZY OD GLEBOKOSCI — plytszy limit daje mniej z kazdej
+# transakcji, za to wiecej transakcji. Liczby z tools/glebokosc_lacznie.py
+# (2021-08..2026-10, 134 monety). Pierwsza wersja miala wpisane +2,3..+2,7 na
+# sztywno i przy glebokosci 1,5 zatrzymala poprawny pomiar.
+ODNIESIENIE = {0.75: 0.2574, 1.0: 0.4958, 1.25: 0.8591, 1.5: 1.3643,
+               2.0: 2.6743, 2.5: 4.0772, 3.0: 6.3076}
+
 
 def main():
     tx = [pd.read_parquet(p) for p in sorted(glob.glob("paczki/*/tx.parquet"))]
