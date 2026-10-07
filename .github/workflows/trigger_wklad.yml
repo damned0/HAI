@@ -1,0 +1,52 @@
+name: trigger kontra wybor (F+S)
+on:
+  workflow_dispatch:
+    inputs:
+      od:        { description: "od daty",            default: "2023-01-01" }
+      glebokosc: { description: "limit N x rozstep",  default: "2.0" }
+
+jobs:
+  paczki:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -q pandas numpy requests pyarrow
+      - name: paczka ${{ matrix.shard }}
+        run: |
+          # BTC jest w KAZDEJ paczce — bez niego krok zbiorczy nie ma triggera.
+          M=$(python3 -c "
+          import sys
+          w=[x.strip() for x in open('monety.txt').read().replace('\n',',').split(',') if x.strip()]
+          w=[x for x in w if x.upper() not in ('BTC','BTCUSDT')]
+          print(','.join(['BTC']+w[${{ matrix.shard }}::20]))")
+          echo "paczka: $M"
+          cd tools && python3 trigger_shard.py --monety "$M" --od "${{ inputs.od }}" \
+            --glebokosc "${{ inputs.glebokosc }}" --wyjscie "../paczki/s${{ matrix.shard }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paczka-${{ matrix.shard }}
+          path: paczki/
+
+  zbiorczo:
+    needs: paczki
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -q pandas numpy pyarrow
+      - uses: actions/download-artifact@v4
+        with: { path: paczki, pattern: "paczka-*", merge-multiple: true }
+      - run: |
+          cd tools && python3 trigger_agg.py --wejscie ../paczki --lista98 ../monety.txt \
+            2>&1 | tee ../WYNIK.txt
+      - uses: actions/upload-artifact@v4
+        with: { name: WYNIK, path: WYNIK.txt }
