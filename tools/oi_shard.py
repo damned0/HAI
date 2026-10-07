@@ -128,7 +128,7 @@ def main():
     JEDNO = a.jedno_zlecenie == "1"
     print(f"glebokosc limitu: {GLEB} x rozstep 14 h | jedno zlecenie na monete: {JEDNO}", flush=True)
     s = requests.Session(); s.headers["User-Agent"] = "HAI/1.0"
-    tx, zam = [], {}
+    tx, zam, oig = [], {}, {}
     for sym in [x.strip().upper() for x in a.monety.split(",") if x.strip()]:
         t0 = time.time()
         sb = sym if sym.endswith("USDT") else f"{sym}USDT"
@@ -146,6 +146,8 @@ def main():
         F, zm = warunki(c, h, l, v)
         S = F & zm
         zam[sym] = o.close
+        oig[sym] = oih          # godzinowe OI — do testu sekwencji; 1,5 GB piecio-
+                                 # minutowych schodzi do kilkunastu MB godzinowych
         wolne, n = 0, 0
         for i in np.flatnonzero(S):
             if JEDNO and i < wolne:
@@ -169,6 +171,8 @@ def main():
         pd.DataFrame(tx).to_parquet(f"{a.wyjscie}/tx.parquet", index=False)
     if zam:
         pd.DataFrame(zam).to_parquet(f"{a.wyjscie}/zamkniecia.parquet")
+    if oig:
+        pd.DataFrame(oig).to_parquet(f"{a.wyjscie}/oi_godzinowe.parquet")
     print(f"\nRAZEM {len(tx)} transakcji, {len(zam)} monet", flush=True)
 
 
