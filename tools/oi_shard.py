@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np, pandas as pd, requests
 
 BAZA = "https://data.binance.vision/data/futures/um"
-GLEB, TRZYM_H, OSTROZ, BAZA_H = 2.0, 24, 0.0005, 30 * 24
+TRZYM_H, OSTROZ, BAZA_H = 24, 0.0005, 30 * 24
 MIN_WAR, PROG_ATR = 2, 0.40     # jak w .env EPV/DEV
 
 
@@ -115,9 +115,13 @@ def main():
     ap.add_argument("--monety", required=True)
     ap.add_argument("--od", default="2023-01-01")
     ap.add_argument("--do", default=(pd.Timestamp.utcnow().tz_localize(None) - pd.Timedelta(days=3)).strftime("%Y-%m-%d"))
+    ap.add_argument("--glebokosc", type=float, default=2.0,
+                    help="limit N*rozstep14 pod cena; 2,0 to EPV/DEV, 1,5 daje 2x wiecej wypelnien")
     ap.add_argument("--wyjscie", default="wynik")
     a = ap.parse_args()
     os.makedirs(a.wyjscie, exist_ok=True)
+    GLEB = a.glebokosc
+    print(f"glebokosc limitu: {GLEB} x rozstep 14 h", flush=True)
     s = requests.Session(); s.headers["User-Agent"] = "HAI/1.0"
     tx, zam = [], {}
     for sym in [x.strip().upper() for x in a.monety.split(",") if x.strip()]:
