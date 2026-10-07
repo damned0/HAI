@@ -148,24 +148,50 @@ def main():
         zam[sym] = o.close
         oig[sym] = oih          # godzinowe OI — do testu sekwencji; 1,5 GB piecio-
                                  # minutowych schodzi do kilkunastu MB godzinowych
+        # DWA WARIANTY NA TYCH SAMYCH SYGNALACH, zeby porownanie bylo parowane:
+        #   A (staly)   limit liczony RAZ, z ceny w chwili sygnalu, wazny 24 h.
+        #               Tak dziala silnik dzisiaj.
+        #   B (ruchomy) limit przeliczany CO GODZINE z poprzedniego zamkniecia.
+        #               Powod: zmierzone 07.10 — zlecenie wypelnione w ciagu 3 h
+        #               daje +5,97, a stojace ponad 6 h tylko +1,79 (t=4,97).
+        #               Stare zlecenie nie stoi juz 2 rozstepy pod rynkiem, tylko
+        #               2 rozstepy pod cena sprzed doby. Ruchomy limit naprawia
+        #               to bez tracenia transakcji.
+        # Przyczynowo: limit na godzine j liczymy z zamkniecia j-1, ktore w chwili
+        # decyzji juz znamy. Zadnego zagladania w przyszlosc.
         wolne, n = 0, 0
         for i in np.flatnonzero(S):
             if JEDNO and i < wolne:
                 continue
             if i + 2 * TRZYM_H >= len(o) or not np.isfinite(atr[i]) or not np.isfinite(z[i]):
                 continue
-            lim = c[i] - GLEB * atr[i]
-            k = next((j for j in range(i + 1, i + 1 + TRZYM_H) if l[j] <= lim * (1 - OSTROZ)), None)
-            if k is None:
-                wolne = i + TRZYM_H; continue
-            wolne = k + TRZYM_H
-            if k + TRZYM_H >= len(o):
-                continue
-            tx.append({"coin": sym, "t_syg": o.index[i], "t_we": o.index[k],
-                       "t_wy": o.index[k + TRZYM_H], "wejscie": lim,
-                       "wyjscie": c[k + TRZYM_H], "oiz": z[i],
-                       "atr_pct": atr[i] / c[i] * 100})
-            n += 1
+            for war in ("A", "B"):
+                if war == "A":
+                    lim = c[i] - GLEB * atr[i]
+                    k = next((j for j in range(i + 1, i + 1 + TRZYM_H)
+                              if l[j] <= lim * (1 - OSTROZ)), None)
+                else:
+                    lim, k = None, None
+                    for j in range(i + 1, i + 1 + TRZYM_H):
+                        if not np.isfinite(atr[j - 1]):
+                            continue
+                        lj = c[j - 1] - GLEB * atr[j - 1]
+                        if lj > 0 and l[j] <= lj * (1 - OSTROZ):
+                            lim, k = lj, j
+                            break
+                if k is None or k + TRZYM_H >= len(o):
+                    if war == "A":
+                        wolne = i + TRZYM_H
+                    continue
+                if war == "A":
+                    wolne = k + TRZYM_H
+                tx.append({"coin": sym, "wariant": war, "t_syg": o.index[i],
+                           "t_we": o.index[k], "t_wy": o.index[k + TRZYM_H],
+                           "wejscie": lim, "wyjscie": c[k + TRZYM_H], "oiz": z[i],
+                           "atr_pct": atr[i] / c[i] * 100,
+                           "znizka_pct": (1 - lim / c[k - 1]) * 100})
+                if war == "A":
+                    n += 1
         print(f"  {sym}: {len(o):,} swiec, {n} transakcji, {time.time()-t0:.0f} s", flush=True)
     if tx:
         pd.DataFrame(tx).to_parquet(f"{a.wyjscie}/tx.parquet", index=False)
