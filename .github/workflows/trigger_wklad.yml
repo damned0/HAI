@@ -46,7 +46,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { path: paczki, pattern: "paczka-*", merge-multiple: true }
       - run: |
-          cd tools && python3 trigger_agg.py --wejscie ../paczki --lista98 ../monety.txt \
+          cd tools && python3 trigger_agg.py --wejscie ../paczki --lista98 ../monety98.txt \
             2>&1 | tee ../WYNIK.txt
       - uses: actions/upload-artifact@v4
         with: { name: WYNIK, path: WYNIK.txt }
