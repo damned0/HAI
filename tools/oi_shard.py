@@ -209,8 +209,18 @@ def main():
                     continue
                 if war == "A":
                     wolne = k + TRZYM_H
+                # SCIEZKA w trakcie trzymania — zeby pozniej testowac dowolny stop
+                # albo cel BEZ kolejnego przebiegu. Zapisujemy najglebszy dolek,
+                # najwyzszy szczyt i GODZINE kazdego: stop zadziala tylko wtedy,
+                # gdy dolek przyszedl PRZED szczytem.
+                _sl = l[k + 1:k + 1 + TRZYM_H]
+                _sh = h[k + 1:k + 1 + TRZYM_H]
                 tx.append({"coin": sym, "wariant": war, "bramka": BRAMKA,
-                       "zmiecenie": bool(zm[i]), "t_syg": o.index[i],
+                           "dolek": float(_sl.min()) if len(_sl) else lim,
+                           "szczyt": float(_sh.max()) if len(_sh) else lim,
+                           "godz_dolka": int(_sl.argmin()) if len(_sl) else 0,
+                           "godz_szczytu": int(_sh.argmax()) if len(_sh) else 0,
+                           "zmiecenie": bool(zm[i]), "t_syg": o.index[i],
                            "t_we": o.index[k], "t_wy": o.index[k + TRZYM_H],
                            "wejscie": lim, "wyjscie": c[k + TRZYM_H], "oiz": z[i],
                            "atr_pct": atr[i] / c[i] * 100, "n_war": int(nwar[i]),
