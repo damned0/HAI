@@ -106,8 +106,13 @@ def warunki(c, h, l, v):
         zm[k:] |= sw[:-k]
     W = {k: np.nan_to_num(x.astype(float), nan=0.0).astype(bool) for k, x in W.items()}
     W["zm"] = zm
+    # n = liczba spelnionych z piatki (jak score_symbol doktryny: float(n)).
+    # SILNIK SORTUJE KANDYDATOW WLASNIE PO TYM — wiec baza do porownania z
+    # rankingiem po ATR to ranking po n, a nie losowanie.
+    n = (W["rsi"].astype(int) + W["kumo"].astype(int) + W["tk"].astype(int)
+         + W["vol"].astype(int) + W["wst"].astype(int))
     F = W["wst"] & ((W["rsi"].astype(int) + W["kumo"] + W["tk"] + W["vol"]) >= MIN_WAR)
-    return F, W["zm"]
+    return F, W["zm"], n
 
 
 def main():
@@ -143,7 +148,7 @@ def main():
         oih = oi.groupby(oi.index.floor("h")).last().reindex(o.index)
         z = ((oih - oih.rolling(BAZA_H, min_periods=BAZA_H // 3).mean())
              / oih.rolling(BAZA_H, min_periods=BAZA_H // 3).std()).to_numpy(float)
-        F, zm = warunki(c, h, l, v)
+        F, zm, nwar = warunki(c, h, l, v)
         S = F & zm
         zam[sym] = o.close
         oig[sym] = oih          # godzinowe OI — do testu sekwencji; 1,5 GB piecio-
@@ -188,7 +193,7 @@ def main():
                 tx.append({"coin": sym, "wariant": war, "t_syg": o.index[i],
                            "t_we": o.index[k], "t_wy": o.index[k + TRZYM_H],
                            "wejscie": lim, "wyjscie": c[k + TRZYM_H], "oiz": z[i],
-                           "atr_pct": atr[i] / c[i] * 100,
+                           "atr_pct": atr[i] / c[i] * 100, "n_war": int(nwar[i]),
                            "znizka_pct": (1 - lim / c[k - 1]) * 100})
                 if war == "A":
                     n += 1
