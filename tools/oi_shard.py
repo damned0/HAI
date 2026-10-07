@@ -120,6 +120,10 @@ def main():
     ap.add_argument("--monety", required=True)
     ap.add_argument("--od", default="2023-01-01")
     ap.add_argument("--do", default=(pd.Timestamp.utcnow().tz_localize(None) - pd.Timedelta(days=3)).strftime("%Y-%m-%d"))
+    ap.add_argument("--z-oi", default="1",
+                    help="0 = bez danych OI. Potrzebne dla WYCOFANYCH kontraktow, "
+                         "ktore OI nie maja — inaczej wypadaja po cichu i wracamy "
+                         "do wszechswiata samych ocalalych.")
     ap.add_argument("--bramka", default="FS", choices=["FS", "F", "BAZA"],
                     help="FS = wstegi + >=2 z 4 + zmiecenie (DEV dzis). "
                          "F = bez zmiecenia (EPV dzis). "
@@ -147,14 +151,21 @@ def main():
         o = klines(s, sb, a.od, a.do)
         if o is None or len(o) < 800:
             print(f"  {sym}: brak swiec", flush=True); continue
-        oi = metrics(s, sb, a.od, a.do)
-        if oi is None or len(oi) < 2000:
+        # OI NIEOBOWIAZKOWE (2026-10-07). Wczesniej brak OI wyrzucal monete —
+        # a wycofane kontrakty OI nie maja. To byla DRUGA warstwa tego samego
+        # bledu co magazyn samych ocalalych: nawet dodane, wypadalyby po cichu.
+        oi = metrics(s, sb, a.od, a.do) if a.z_oi == "1" else None
+        if a.z_oi == "1" and (oi is None or len(oi) < 2000):
             print(f"  {sym}: brak OI", flush=True); continue
         c, h, l, v = (o[k].to_numpy(float) for k in ("close", "high", "low", "volume"))
         atr = (o.high.rolling(14).max() - o.low.rolling(14).min()).to_numpy(float)
-        oih = oi.groupby(oi.index.floor("h")).last().reindex(o.index)
-        z = ((oih - oih.rolling(BAZA_H, min_periods=BAZA_H // 3).mean())
-             / oih.rolling(BAZA_H, min_periods=BAZA_H // 3).std()).to_numpy(float)
+        if oi is not None:
+            oih = oi.groupby(oi.index.floor("h")).last().reindex(o.index)
+            z = ((oih - oih.rolling(BAZA_H, min_periods=BAZA_H // 3).mean())
+                 / oih.rolling(BAZA_H, min_periods=BAZA_H // 3).std()).to_numpy(float)
+        else:
+            oih = pd.Series(np.nan, index=o.index)
+            z = np.zeros(len(o))          # oi_z nieuzywane w tym tescie
         F, zm, nwar = warunki(c, h, l, v)
         # F juz zawiera wstegi + >=2 z 4. Zmiecenie to OSOBNA bramka.
         S = (F & zm) if BRAMKA == "FS" else F
@@ -176,7 +187,7 @@ def main():
         for i in np.flatnonzero(S):
             if JEDNO and i < wolne:
                 continue
-            if i + 2 * TRZYM_H >= len(o) or not np.isfinite(atr[i]) or not np.isfinite(z[i]):
+            if i + 2 * TRZYM_H >= len(o) or not np.isfinite(atr[i]):
                 continue
             for war in ("A", "B"):
                 if war == "A":
