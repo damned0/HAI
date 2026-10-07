@@ -115,13 +115,18 @@ def main():
     ap.add_argument("--monety", required=True)
     ap.add_argument("--od", default="2023-01-01")
     ap.add_argument("--do", default=(pd.Timestamp.utcnow().tz_localize(None) - pd.Timedelta(days=3)).strftime("%Y-%m-%d"))
+    ap.add_argument("--jedno-zlecenie", default="1",
+                    help="1 = jedno zlecenie na monete naraz (jak silnik), 0 = jak oryginalny "
+                         "pomiar glebokosc_lacznie.py. Bez tej reguly jest 6x wiecej transakcji: "
+                         "wersja do pytania CZY JEST INFORMACJA. Z regula — do pytania ILE ZAROBIMY.")
     ap.add_argument("--glebokosc", type=float, default=2.0,
                     help="limit N*rozstep14 pod cena; 2,0 to EPV/DEV, 1,5 daje 2x wiecej wypelnien")
     ap.add_argument("--wyjscie", default="wynik")
     a = ap.parse_args()
     os.makedirs(a.wyjscie, exist_ok=True)
     GLEB = a.glebokosc
-    print(f"glebokosc limitu: {GLEB} x rozstep 14 h", flush=True)
+    JEDNO = a.jedno_zlecenie == "1"
+    print(f"glebokosc limitu: {GLEB} x rozstep 14 h | jedno zlecenie na monete: {JEDNO}", flush=True)
     s = requests.Session(); s.headers["User-Agent"] = "HAI/1.0"
     tx, zam = [], {}
     for sym in [x.strip().upper() for x in a.monety.split(",") if x.strip()]:
@@ -143,7 +148,9 @@ def main():
         zam[sym] = o.close
         wolne, n = 0, 0
         for i in np.flatnonzero(S):
-            if i < wolne or i + 2 * TRZYM_H >= len(o) or not np.isfinite(atr[i]) or not np.isfinite(z[i]):
+            if JEDNO and i < wolne:
+                continue
+            if i + 2 * TRZYM_H >= len(o) or not np.isfinite(atr[i]) or not np.isfinite(z[i]):
                 continue
             lim = c[i] - GLEB * atr[i]
             k = next((j for j in range(i + 1, i + 1 + TRZYM_H) if l[j] <= lim * (1 - OSTROZ)), None)
